@@ -1,18 +1,18 @@
 #!/usr/bin/env node
-import { Command } from 'commander';
-import { existsSync } from 'fs';
-import { resolve } from 'path';
-import { VibeCheckAnalyzer } from './analyzer';
-import { loadConfig } from './config';
-import { generateReport } from './reporter';
-import { runRules, calculateScore } from './rules';
+const { Command } = require('commander');
+const { existsSync } = require('fs');
+const { resolve } = require('path');
+const { VibeCheckAnalyzer } = require('./analyzer');
+const { loadConfig } = require('./config');
+const { generateReport } = require('./reporter');
+const { runRules, calculateScore } = require('./rules');
 
 const program = new Command();
 
 program
   .name('vibe-check')
   .description('🎯 Code quality analyzer for React applications')
-  .version('0.1.0');
+  .version('1.0.2');
 
 program
   .argument('[path]', 'Path to analyze (default: current directory)', '.')
@@ -20,7 +20,6 @@ program
   .option('-f, --format <format>', 'Output format (console, json, junit)', 'console')
   .option('--rules <rules>', 'Comma-separated list of rule categories to run')
   .option('--ignore-config', 'Ignore config file and use defaults')
-  .option('--fix', 'Show detailed fix suggestions')
   .option('--score-only', 'Only show the overall score')
   .option('--verbose', 'Show detailed analysis information')
   .action(async (targetPath: string, options: {
@@ -28,7 +27,6 @@ program
     format: string;
     rules?: string;
     ignoreConfig: boolean;
-    fix: boolean;
     scoreOnly: boolean;
     verbose: boolean;
   }) => {
@@ -64,42 +62,49 @@ async function runAnalysis(targetPath: string, options: any) {
     process.exit(1);
   }
 
+  if (options.verbose) {
+    console.log(`🎯 Running vibe check on: ${targetPath}`);
+    console.log(`📁 Full path: ${fullPath}`);
+  }
+
   // Load configuration
   const config = options.ignoreConfig ? 
-    (await import('./config')).DEFAULT_CONFIG : 
+    require('./config').DEFAULT_CONFIG : 
     loadConfig(options.config);
+
+  if (options.verbose) {
+    console.log(`⚙️  Config loaded`);
+  }
 
   // Create analyzer
   const analyzer = new VibeCheckAnalyzer(config);
-
-  console.log(`🎯 Running vibe check on: ${targetPath}`);
-  if (options.verbose) {
-    console.log(`📁 Full path: ${fullPath}`);
-    console.log(`⚙️  Config: ${JSON.stringify(config, null, 2)}`);
-  }
 
   // Run analysis
   const startTime = Date.now();
   const results = analyzer.analyzeDirectory(fullPath);
   const endTime = Date.now();
 
+  if (options.verbose) {
+    console.log(`📊 Analysis completed in ${endTime - startTime}ms`);
+  }
+
   if (results.length === 0) {
     console.log('⚠️  No React files found to analyze');
     return;
   }
 
-  // Extract rule results from analyzer results (they already contain the analysis)
-  const ruleResults = results.map(result => ({
+  // Calculate scores
+  const ruleResults = results.map((result: any) => ({
     issues: result.issues,
     suggestions: result.suggestions,
-    metrics: result.metrics
+    metrics: result.metrics || {}
   }));
 
   const scores = calculateScore(ruleResults, results.length);
 
   // Handle score-only option
   if (options.scoreOnly) {
-    console.log(`Overall Score: ${scores.total}/10`);
+    console.log(`Overall Score: ${scores.total}/100`);
     return;
   }
 
@@ -127,8 +132,8 @@ async function runAnalysis(targetPath: string, options: any) {
   }
 
   // Exit with error code if there are errors
-  const hasErrors = results.some(result => 
-    result.issues.some(issue => issue.severity === 'error')
+  const hasErrors = results.some((result: any) => 
+    result.issues.some((issue: any) => issue.severity === 'error')
   );
   
   if (hasErrors) {
@@ -152,8 +157,18 @@ function createConfigFile() {
     ],
     severity: {
       'large-component': 'error',
+      'unused-props': 'warning',
+      'high-complexity': 'warning',
+      'complex-jsx': 'warning', 
+      'many-hooks': 'warning',
       'prop-drilling': 'error',
-      'missing-memo': 'warning'
+      'context-overuse': 'warning',
+      'state-chaos': 'warning',
+      'magic-values': 'warning',
+      'messy-structure': 'warning',
+      'missing-memo': 'warning',
+      'missing-usememo': 'warning',
+      'missing-usecallback': 'warning'
     }
   };
 
@@ -164,7 +179,6 @@ function createConfigFile() {
 
   fs.writeFileSync('.vibecheck.json', JSON.stringify(configContent, null, 2));
   console.log('✅ Created .vibecheck.json configuration file');
-  console.log('💡 Edit this file to customize your rules and settings');
 }
 
 function listRules() {
@@ -193,7 +207,6 @@ function listRules() {
       category: '⚡ Performance',
       rules: [
         { name: 'missing-memo', description: 'Suggests React.memo for optimization opportunities' },
-        { name: 'missing-effect-deps', description: 'Flags useEffect calls missing dependency arrays' },
         { name: 'missing-usememo', description: 'Suggests useMemo for expensive operations' },
         { name: 'missing-usecallback', description: 'Suggests useCallback for callback optimization' }
       ]
@@ -212,7 +225,6 @@ function listRules() {
 }
 
 function generateJUnitReport(reportData: any) {
-  // Basic JUnit XML generation for CI/CD integration
   const totalTests = reportData.totalFiles;
   const failures = reportData.results.reduce((sum: number, result: any) => 
     sum + result.issues.filter((issue: any) => issue.severity === 'error').length, 0);
@@ -241,6 +253,4 @@ process.on('unhandledRejection', (reason, promise) => {
 });
 
 // Parse CLI arguments
-if (require.main === module) {
-  program.parse();
-}
+program.parse();
