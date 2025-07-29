@@ -1,0 +1,18 @@
+{
+  "rules": {
+    "prop-drilling-depth": 5,
+    "max-component-lines": 450,
+    "require-memo": false
+  },
+  "ignore": [
+    "**/*.test.tsx",
+    "**/*.test.ts",
+    "**/*.stories.tsx",
+    "**/node_modules/**"
+  ],
+  "severity": {
+    "large-component": "error",
+    "prop-drilling": "error",
+    "missing-memo": "warning"
+  }
+}
